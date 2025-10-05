@@ -1,0 +1,8 @@
+# requirements.txt
+streamlit
+pypdf
+pandas
+langchain
+chromadb
+sentence-transformers
+torch   # CPU version will be installed automatically by pip usually
