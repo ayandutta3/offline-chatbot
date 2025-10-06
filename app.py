@@ -24,12 +24,44 @@ import streamlit as st
 from typing import List, Tuple
 from pypdf import PdfReader
 import pandas as pd
+import gc
+
+try:
+    from pypdf.errors import PdfReadError, EmptyFileError
+except Exception:
+    # pypdf older/newer versions may differ; fall back to general Exception handling later
+    PdfReadError = Exception
+    EmptyFileError = Exception
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
+
+# Modern imports with fallbacks. The LangChain project split some components
+# into dedicated packages (langchain-huggingface, langchain-chroma, langchain-ollama)
+# — prefer those but fall back to langchain-community if the dedicated package
+# isn't installed to keep compatibility in different environments.
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+    _EMBEDDINGS_SOURCE = "langchain_huggingface"
+except Exception:
+    try:
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+        _EMBEDDINGS_SOURCE = "langchain_community"
+    except Exception:
+        HuggingFaceEmbeddings = None
+        _EMBEDDINGS_SOURCE = None
+
+try:
+    from langchain_chroma import Chroma
+    _CHROMA_SOURCE = "langchain_chroma"
+except Exception:
+    try:
+        from langchain_community.vectorstores import Chroma
+        _CHROMA_SOURCE = "langchain_community"
+    except Exception:
+        Chroma = None
+        _CHROMA_SOURCE = None
 
 
 # -------------------------------
@@ -40,11 +72,17 @@ def get_local_llm():
     Returns a local LLM instance from Ollama.
     Make sure Ollama is installed and the model (e.g., mistral) is pulled.
     """
+    # Prefer the dedicated langchain-ollama package (newer)
     try:
-        from langchain.llms import Ollama
-        return Ollama(model="mistral")  # You can change "mistral" to another local model
+        from langchain_ollama import OllamaLLM
+        return OllamaLLM(model="mistral")
     except Exception:
-        return None
+        # Fall back to the community package import if available
+        try:
+            from langchain_community.llms import Ollama
+            return Ollama(model="mistral")
+        except Exception:
+            return None
 
 
 # -------------------------------
@@ -67,10 +105,33 @@ def load_pdf_pages(pdf_path: str) -> List[Tuple[str, dict]]:
     Extract text page by page from a PDF.
     Returns a list of (text, metadata) tuples.
     """
-    reader = PdfReader(pdf_path)
+    # Skip missing or empty files early
+    if not os.path.exists(pdf_path):
+        st.warning(f"PDF not found, skipping: {pdf_path}")
+        return []
+    try:
+        if os.path.getsize(pdf_path) == 0:
+            st.warning(f"Skipping empty PDF file: {os.path.basename(pdf_path)}")
+            return []
+    except OSError:
+        # Can't get size; continue and let PdfReader handle it
+        pass
+
+    try:
+        reader = PdfReader(pdf_path)
+    except (EmptyFileError, PdfReadError) as e:
+        st.warning(f"Skipping unreadable PDF {os.path.basename(pdf_path)}: {e}")
+        return []
+    except Exception as e:
+        st.warning(f"Error opening PDF {os.path.basename(pdf_path)}: {e}")
+        return []
+
     pages = []
     for i, page in enumerate(reader.pages, start=1):
-        text = page.extract_text() or ""
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            text = ""
         if text.strip():
             meta = {"source": os.path.basename(pdf_path), "page": i, "type": "pdf"}
             pages.append((text, meta))
@@ -103,6 +164,10 @@ def get_text_splitter(chunk_size: int = 800, overlap: int = 150):
 @st.cache_resource
 def get_embeddings():
     """Return a HuggingFace embedding model for vectorization."""
+    if HuggingFaceEmbeddings is None:
+        raise RuntimeError(
+            "HuggingFaceEmbeddings is not available. Install langchain-huggingface or langchain-community: `pip install -U langchain-huggingface langchain-community`"
+        )
     return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 
@@ -140,6 +205,11 @@ def build_or_rebuild_chroma(documents: List[Document], persist_directory: str = 
     """
     embeddings = get_embeddings()
 
+    if Chroma is None:
+        raise RuntimeError(
+            "Chroma vectorstore is not available. Install langchain-chroma or langchain-community: `pip install -U langchain-chroma langchain-community`"
+        )
+
     if rebuild:
         # Close and clear old DB before deleting
         try:
@@ -164,11 +234,9 @@ def build_or_rebuild_chroma(documents: List[Document], persist_directory: str = 
         db = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
         if documents:
             db.add_documents(documents)
-            db.persist()
     else:
         if documents:
             db = Chroma.from_documents(documents, embeddings, persist_directory=persist_directory)
-            db.persist()
         else:
             db = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
 
@@ -226,9 +294,26 @@ if uploaded_files:
         if st.button("Send"):
             if query.strip():
                 with st.spinner("🤔 Thinking... Generating answer..."):
-                    result = qa(query)
-                    answer = result["result"]
-                    sources = result.get("source_documents", [])
+                    # Try the modern invoke interface, then fall back to older call/run styles
+                    result = None
+                    try:
+                        # Newer chains support invoke with a dict
+                        result = qa.invoke({"query": query})
+                    except Exception:
+                        try:
+                            # Older API: call the chain directly
+                            result = qa(query)
+                        except Exception:
+                            try:
+                                # Some chains expose a run method
+                                answer = qa.run(query)
+                                result = {"result": answer, "source_documents": []}
+                            except Exception as e:
+                                st.error(f"Failed to run QA chain: {e}")
+                                result = {"result": "", "source_documents": []}
+
+                    answer = result.get("result") if isinstance(result, dict) else result
+                    sources = result.get("source_documents", []) if isinstance(result, dict) else []
 
                     # Collect citations
                     citations = []

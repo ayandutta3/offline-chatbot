@@ -3,6 +3,7 @@ streamlit
 pypdf
 pandas
 langchain
+langchain_community
 chromadb
 sentence-transformers
 torch   # CPU version will be installed automatically by pip usually
