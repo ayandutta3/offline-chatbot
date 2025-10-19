@@ -1,0 +1,90 @@
+<div class="container py-4">
+  <h1 class="mb-3">💬 Document Chat (Angular frontend)</h1>
+
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <label class="form-label">Select PDF / Excel files</label>
+      <input type="file" (change)="onFilesSelected($event)" multiple class="form-control" accept=".pdf,.xlsx,.xls" />
+      <div class="mt-2">
+        <button class="btn btn-primary me-2" (click)="uploadAndIndex(false)" [disabled]="!files.length || isIndexing">
+          <span *ngIf="!isIndexing">Upload & Index</span>
+          <span *ngIf="isIndexing">Indexing…</span>
+        </button>
+        <button class="btn btn-warning" (click)="uploadAndIndex(true)" [disabled]="!files.length || isIndexing">
+          Upload & Rebuild Index
+        </button>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Backend</label>
+      <div class="btn-group d-flex" role="group">
+        <button class="btn" [ngClass]="backend==='openai' ? 'btn-outline-primary active' : 'btn-light'" (click)="setBackend('openai')">OpenAI GPT</button>
+        <button class="btn" [ngClass]="backend==='local' ? 'btn-outline-primary active' : 'btn-light'" (click)="setBackend('local')">Local (Ollama)</button>
+      </div>
+
+      <div class="mt-2">
+        <label class="form-label">Knowledge Mode</label>
+        <select class="form-select" [(ngModel)]="knowledgeMode">
+          <option value="files_only">Files Only 🗂️</option>
+          <option value="files_and_model">Files + Model Knowledge 🧠</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat area -->
+  <div class="row">
+    <div class="col-md-8">
+      <div class="card mb-3">
+        <div class="card-body" style="min-height: 300px;">
+          <div *ngFor="let msg of chat; let i = index">
+            <div [ngClass]="msg.role==='You' ? 'text-end mb-2' : 'text-start mb-2'">
+              <div [ngClass]="msg.role==='You' ? 'badge bg-primary text-wrap' : 'badge bg-light text-dark text-wrap' " style="display:inline-block; max-width:100%;">
+                <strong *ngIf="msg.role==='You'">You:</strong>
+                <strong *ngIf="msg.role==='Bot'">Bot:</strong>
+                <span *ngIf="msg.role==='You'">{{ msg.text }}</span>
+                <span *ngIf="msg.role==='Bot'">{{ msg.response }}</span>
+              </div>
+
+              <div *ngIf="msg.role==='Bot' && msg.sources?.length" class="mt-1">
+                <a class="text-decoration-none" data-bs-toggle="collapse" [attr.href]="'#sources' + i" role="button" aria-expanded="false" [attr.aria-controls]="'sources' + i">📚 Show Sources</a>
+                <div class="collapse" [attr.id]="'sources' + i">
+                  <ul class="list-group mt-2">
+                    <li *ngFor="let s of msg.sources" class="list-group-item p-1">{{ s }}</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div *ngIf="!chat.length" class="text-muted">No messages yet. Upload files and ask a question.</div>
+        </div>
+      </div>
+
+      <!-- Controls below chat -->
+      <div class="d-flex gap-2 mb-3">
+        <input class="form-control" placeholder="Ask a question..." [(ngModel)]="question" [disabled]="isQuerying" (keydown.enter)="sendQuery()" />
+        <button class="btn btn-success" (click)="sendQuery()" [disabled]="isQuerying || !question">
+          <span *ngIf="!isQuerying">Send</span>
+          <span *ngIf="isQuerying">Thinking…</span>
+        </button>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-danger" (click)="clearChat()">🧹 Clear Chat</button>
+        <button class="btn btn-outline-secondary" (click)="downloadHistory()">💾 Download Chat History</button>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body">
+          <h5>Index info</h5>
+          <p>Upload files, index them, then ask questions. Indexing persists on server side (chroma_db).</p>
+          <p class="small text-muted">If you changed files and want a clean index, choose "Upload & Rebuild Index".</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

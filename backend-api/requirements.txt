@@ -1,0 +1,16 @@
+streamlit
+pypdf
+pandas
+langchain
+langchain_community
+langchain_chroma
+langchain_huggingface
+chromadb
+sentence-transformers
+torch
+openai
+python-dotenv
+langchain_ollama   # for local mode
+fastapi            # for REST API backend
+uvicorn           # for running FastAPI server
+python-multipart   # for handling form data

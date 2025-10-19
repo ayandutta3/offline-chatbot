@@ -1,0 +1,33 @@
+# =========================
+# Node / Angular
+# =========================
+node_modules/
+dist/
+build/
+.tmp/
+.cache/
+coverage/
+.angular/
+package-lock.json
+
+# environment files (optional, if you keep secrets)
+src/environments/environment.prod.ts
+src/environments/environment.ts
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
