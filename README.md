@@ -17,6 +17,88 @@ Architecture overview
 - `angular-app/` (frontend) — Angular application that provides the chat UI and file-upload pages and calls the FastAPI endpoints.
 - `chroma_db/` — persisted Chroma vector store folder (created/used by backend).
 
+Backend architecture (detailed)
+
+The backend implements a standard retrieval-augmented generation (RAG) pipeline using the following components:
+
+- LangChain (or LangChain-style orchestration)
+	- Responsible for wiring together document loaders, text splitters, embedding calls, vector store operations, retrievers and the final QA chain.
+	- We use LangChain abstractions (Document, TextSplitter, Embeddings, VectorStoreRetriever, Chains) as the conceptual flow; the code in `app.py` follows the same steps but may use direct LangChain imports or helper utilities.
+
+- Document ingestion and splitting
+	- Document loaders extract raw text from PDFs (page-by-page) and Excel files (row-by-row). Each extracted unit is turned into a LangChain `Document` with metadata fields like `source` (filename), `page` or `row`, and `chunk_id`.
+	- A TextSplitter (for example RecursiveCharacterTextSplitter) breaks long text into chunks with a configurable `chunk_size` (e.g. 1000 characters) and `chunk_overlap` (e.g. 200) to preserve context across chunk boundaries.
+
+- Embeddings (HuggingFace sentence-transformers)
+	- The backend uses HuggingFace embeddings (for example `sentence-transformers/all-MiniLM-L6-v2`) to convert text chunks into dense vectors.
+	- Embeddings are produced in batches for throughput. If you have a GPU or ONNX runtime available, performance improves significantly; the README `requirements` include `sentence-transformers`, `transformers`, and `onnxruntime` for that reason.
+	- Embedding objects include metadata; store the text chunk, source, and any original offsets so answers can cite the source location.
+
+- Vector store — Chroma DB
+	- Chroma stores the dense vectors and associated metadata. The project persists the Chroma DB under `backend-api/chroma_db` (or `chroma_db/`) so indexes survive restarts.
+	- Typical operations:
+		- create / open collection (name derived from dataset or a default name)
+		- add vectors + metadata (on upload / index)
+		- query vector search (k nearest neighbors) via a retriever
+		- optionally delete/clear the collection when doing a full rebuild
+	- Keep in mind Chroma may change APIs between versions — check `chromadb` docs if you upgrade.
+
+- Retriever and RAG (LangChain retrieval QA)
+	- A VectorStoreRetriever wraps the Chroma collection and returns the top-k most relevant chunks for a query.
+	- The RAG flow is:
+		1. Receive a user question via `/query` endpoint
+		2. Use the same embedding model to embed the question
+		3. Ask the retriever for top-k chunks (configurable, e.g. k=4)
+		4. Build a prompt that includes the retrieved context and the user question
+		5. Send the prompt to the LLM chain (local Ollama or remote OpenAI) and return the answer
+	- LangChain's `RetrievalQA` (or a custom prompt + LLM chain) is a common pattern used here.
+
+- LLM model options
+	- Ollama (local) — the code supports an offline model via Ollama. Advantages: runs locally, lower latency for small deployments, and no external API cost. Limitations: model size, system resources, and local model availability.
+	- OpenAI (optional) — pass `OPENAI_API_KEY` via environment variable to use OpenAI models (e.g. gpt-4/3.5). Pros: highest-quality responses for some prompts; cons: cost and network requirement.
+	- The backend chooses the model based on configuration or environment variables and constructs the LLM call accordingly. Responses are combined with the retrieved context; the implementation can format the assistant output to include inline citations (source filename + page/row) when available.
+
+- Data shapes and metadata
+	- Document chunk (stored in Chroma) typically contains:
+		- id / chunk_id
+		- text (the chunk)
+		- metadata: { source: filename, page: number | null, row: number | null, chunk_index }
+	- Query flow returns: { answer: string, source_documents: [{ source, page|row, text_excerpt }] }
+
+- Endpoints (behavior)
+	- POST /upload — accepts file uploads (PDF/Excel). Extracts, splits, embeds, and stores vectors. Returns status and any warnings.
+	- POST /index — (re)build the index from `uploads/` or an uploaded set of files. Useful when you want a full rebuild.
+	- POST /query — accepts JSON { question: string } and returns an aggregated answer plus source citations.
+	- GET /history — returns local chat history (if the backend stores conversations)
+	- POST /clear — clears chat history and optionally the vector store
+	- GET /download — downloads the chat history as a text file
+
+Operational considerations
+
+- Performance
+	- Batch embedding calls when indexing many chunks.
+	- Use `onnxruntime` or an accelerated transformer runtime if embedding on CPU is slow; on GPU, transformers with CUDA deliver the best throughput.
+	- Tune `chunk_size`, `chunk_overlap` and `top_k` for quality vs latency trade-offs.
+
+- Storage and persistence
+	- Chroma collections are persisted to disk. When rebuilding the index, the service can delete the collection folder and re-create it.
+	- Keep backups of `chroma_db` if the corpus is expensive to reprocess.
+
+- Concurrency and safety
+	- File upload and indexing may be long-running; the API uses background tasks or synchronous calls depending on the implementation. Consider making indexing asynchronous for large corpora.
+	- Sanitize and validate uploaded files. Avoid unbounded memory growth by limiting file sizes or chunk counts.
+
+- Security
+	- If using OpenAI, set `OPENAI_API_KEY` as an environment variable and do not commit it.
+	- If exposing the FastAPI server externally, add authentication and CORS rules to the API.
+
+- Troubleshooting
+	- "Form data requires \"python-multipart\" to be installed" → `pip install python-multipart`
+	- Missing `fastapi` / `uvicorn` → ensure the virtualenv is active and run `pip install -r backend-api/requirements.txt`
+	- Chroma errors after upgrading versions → check the `chromadb` changelog and migration notes
+
+This section documents the main backend responsibilities. The frontend (`angular-app/`) is a thin client that uploads files, triggers indexing and sends queries to the backend; see the `angular-app/src/app/services/api.ts` service for the exact request shapes used by the UI.
+
 Prerequisites
 
 - Python 3.8+ (3.10/3.11/3.12/3.13 should work)
