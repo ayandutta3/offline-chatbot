@@ -1,140 +1,181 @@
-# PDF/Excel Chatbot (Local + Optional GPT API)
+# PDF/Excel Chatbot — FastAPI backend + Angular frontend
 
-A Streamlit-based chatbot that lets you upload and chat with your PDF and Excel files. The app indexes documents locally using embeddings and a Chroma vector store, and can answer questions using a local LLM (Ollama) or an API-backed LLM (OpenAI).
+This repository hosts a local document chatbot that indexes PDF and Excel files and answers questions using a local or API-backed LLM. The project has been reworked from a Streamlit UI to a modern split architecture:
 
-## Highlights
+- Backend: FastAPI (Python) — document ingestion, indexing, embeddings, and LLM integration
+- Frontend: Angular — single-page application that talks to the FastAPI JSON API
 
-- Upload multiple PDF and Excel files and build a local semantic index
-- Local embeddings using HuggingFace (sentence-transformers)
-- Local vector store (Chroma) persisted to `./chroma_db`
-- Local LLM support via Ollama (offline) or optional OpenAI GPT (online)
-- Inline source citations (file + page/row) in answers
+Highlights
+-- Upload and index PDF / Excel files
+-- Local embeddings (HuggingFace sentence-transformers) and local Chroma vector store
+-- Local LLM support via Ollama (optional) and optional OpenAI support
+-- Angular UI with file upload, index control and chat interface
 
-## Requirements
+Architecture overview
 
-- Python 3.8+
+- `app.py` (backend) — FastAPI application exposing endpoints such as `/upload`, `/index`, `/query`, `/history`, `/clear`, `/download`.
+- `angular-app/` (frontend) — Angular application that provides the chat UI and file-upload pages and calls the FastAPI endpoints.
+- `chroma_db/` — persisted Chroma vector store folder (created/used by backend).
+
+Prerequisites
+
+- Python 3.8+ (3.10/3.11/3.12/3.13 should work)
+- Node.js (v16+ recommended; this repo used Node v22 in development)
+- npm (or pnpm/yarn)
 - Optional: Ollama (for local LLM)
 - Optional: OpenAI API key (if you want to use OpenAI GPT)
 
-## Installation
+Quick start — full local development (backend + frontend)
 
-1. Clone the repository:
+1. Clone the repository and open a terminal:
 
-```bash
+```powershell
 git clone <repository-url>
 cd <repository-name>
 ```
 
-2. Create and activate a virtual environment (recommended):
+
+2. Backend (in `backend-api/`): create and activate a Python virtual environment, install requirements
 
 ```powershell
-# Create virtual environment
+# switch to the backend folder
+cd backend-api
+
+# create virtualenv (Windows PowerShell)
 python -m venv venv
-
-# Activate (PowerShell)
 .\venv\Scripts\Activate.ps1
-```
 
-On macOS / Linux use:
-
-```bash
-source venv/bin/activate
-```
-
-3. Install Python dependencies:
-
-```powershell
+# install backend dependencies
 pip install -r requirements.txt
-# If you want to use the modern LangChain split packages, install these too:
-pip install -U langchain langchain-community langchain-huggingface langchain-chroma langchain-ollama
 ```
 
-4. (Optional) Install Ollama and pull a local model (for offline LLM):
+Notes: `backend-api/requirements.txt` includes packages such as `fastapi`, `uvicorn`, and `python-multipart`. If you hit missing package errors, install them manually (from the `backend-api` folder or active virtualenv):
 
 ```powershell
-# Install Ollama: https://ollama.ai/
-ollama pull mistral
+pip install fastapi uvicorn python-multipart
 ```
 
-5. (Optional) If you plan to use OpenAI instead of local Ollama, set your API key:
+3. Frontend: install Angular dependencies
 
 ```powershell
-setx OPENAI_API_KEY "your_api_key_here"
-# then restart your shell or set it in the current session:
-$env:OPENAI_API_KEY = "your_api_key_here"
+cd angular-app
+npm install
 ```
 
-## Run the App
+If you don't have the Angular CLI globally, you can still run the dev server via the npm scripts (Angular CLI is a dev dependency in modern projects). To install the CLI globally (optional):
 
 ```powershell
-streamlit run app.py
+npm install -g @angular/cli
 ```
 
-Open the URL Streamlit prints (usually http://localhost:8501).
 
-## Usage
+4. Run backend and frontend (development)
 
-- Upload one or more PDF / Excel files using the file uploader.
-- Optionally check "Rebuild index" to delete the existing index and recreate it from uploaded files.
-- Ask questions in the chat box. Responses include source citations when available.
+Open two terminals.
 
-## How it works (brief)
+Terminal A — start FastAPI backend (from `backend-api`):
 
-- The app extracts text from PDFs (page-by-page) and Excel rows.
-- Text is split into chunks via a RecursiveCharacterTextSplitter.
-- Chunks are embedded using a HuggingFace embeddings model (sentence-transformers/all-MiniLM-L6-v2).
-- Embeddings are stored in a local Chroma DB (persisted to `./chroma_db`).
-- A retriever selects top-k chunks for context; the LLM answers based on that context.
-
-## Clearing / Rebuilding the Chroma DB
-
-To start from a clean index, stop the app and delete the `chroma_db` folder:
-
-PowerShell (Windows):
 ```powershell
-Remove-Item -Path ".\chroma_db" -Recurse -Force
+cd backend-api
+.\venv\Scripts\python.exe -m uvicorn app:app --reload
+# Server will be available at http://127.0.0.1:8000
 ```
 
-macOS / Linux:
-```bash
-rm -rf ./chroma_db
+Terminal B — start Angular dev server (from repo root):
+
+```powershell
+cd angular-app
+npm run start
+# or: ng serve --open
+# Frontend will be available at http://localhost:4200
 ```
 
-If you see errors about files being used by another process on Windows, ensure Streamlit is stopped and try again. The app also includes a "Rebuild index" checkbox which attempts to delete the old DB before re-creating — if that fails, use the manual delete command above.
+Open the Angular app in your browser. The UI calls the FastAPI endpoints at `http://localhost:8000` (this is the default base URL used by the frontend service). API docs for the backend are available at:
 
-## Troubleshooting
+- Swagger UI: http://127.0.0.1:8000/docs
+- ReDoc: http://127.0.0.1:8000/redoc
 
-- EmptyFileError when uploading: ensure the upload completed and the file is not zero bytes. The app will skip empty/unreadable files and warn you.
-- LangChain deprecation warnings / import errors: install the recommended modern packages shown above. The code contains fallbacks but installing `langchain-huggingface`, `langchain-chroma`, and `langchain-ollama` removes warnings.
-- Chroma persistence: newer Chroma versions auto-persist; the app no longer calls `db.persist()` explicitly.
+Production build (optional)
 
-## Environment variables
+If you want to produce a static build of the Angular app and serve it with another web server (or wire it into FastAPI):
+
+```powershell
+cd angular-app
+npm run build
+# built files are in angular-app/dist/
+```
+
+Serve the `dist/` folder using nginx, a static-file server, or copy the files into a STATIC folder served by your production backend.
+
+Environment variables
 
 - `OPENAI_API_KEY` — (optional) your OpenAI API key if using the OpenAI mode.
 
-## Development & Testing
+Optional: Ollama (local LLM)
 
-- A simple smoke test is to run the app and upload the included example PDFs in `uploads/`.
-- To run a Python syntax check locally:
+Install and run Ollama as described on https://ollama.ai/. Pull a model with:
 
 ```powershell
-python -m py_compile app.py
+ollama pull <model-name>
 ```
 
-## Project Structure
+Troubleshooting notes
+
+- If Python raises ModuleNotFoundError for `fastapi` or `uvicorn`, ensure you installed packages into the active virtual environment (check `which python` / path).
+- FastAPI endpoints that accept form/file uploads require `python-multipart`. If you see an error like "Form data requires \"python-multipart\" to be installed", install it:
+
+```powershell
+pip install python-multipart
+```
+
+- Angular `npm install` peer dependency issues (zone.js): you may see a peer-deps conflict requiring `zone.js@~0.13.0`. Resolve by either:
+
+	1) Using legacy peer deps while installing:
+
+```powershell
+cd angular-app
+npm install --legacy-peer-deps
+```
+
+	2) Updating the `zone.js` dependency in `angular-app/package.json` to `"~0.13.0"` and re-running `npm install`.
+
+
+Development checklist & quick commands
+
+- Backend (from `backend-api`): create venv, install, run
+
+```powershell
+cd backend-api
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+.\venv\Scripts\python.exe -m uvicorn app:app --reload
+```
+
+
+- Frontend: install and run
+
+```powershell
+cd angular-app
+npm install
+npm run start
+```
+
+Stopping servers
+- Use Ctrl+C in the terminals running the FastAPI or Angular dev servers to stop them.
+
+Project layout (high-level)
 
 ```
 .
-├── app.py              # Main application file (Streamlit)
-├── requirements.txt    # Python dependencies
-├── uploads/            # Place example PDFs / Excels here for quick testing
-└── chroma_db/          # Persistent vector database storage (auto-created)
+├── backend-api/
+│   ├── app.py             # FastAPI backend
+│   ├── requirements.txt   # Backend Python dependencies (fastapi, uvicorn, ...)
+│   ├── chroma_db/         # Local Chroma DB (created/used by backend)
+│   └── uploads/           # Uploads and example files for backend testing
+├── angular-app/           # Angular frontend (src, package.json, etc.)
 ```
 
-## Contributing
+License
 
-- PRs welcome. If you change imports for LangChain packages, update `requirements.txt` accordingly and verify the app runs in a fresh virtual environment.
-
-## License
-
-MIT License
+MIT

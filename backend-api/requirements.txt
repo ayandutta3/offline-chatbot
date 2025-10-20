@@ -1,11 +1,15 @@
-streamlit
+chromadb
+transformers
+onnxruntime
+pydantic
+pdfminer.six
+ollamastreamlit
 pypdf
 pandas
 langchain
 langchain_community
 langchain_chroma
 langchain_huggingface
-chromadb
 sentence-transformers
 torch
 openai
