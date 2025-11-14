@@ -6,16 +6,19 @@ This repository hosts a local document chatbot that indexes PDF and Excel files 
 - Frontend: Angular — single-page application that talks to the FastAPI JSON API
 
 Highlights
--- Upload and index PDF / Excel files
--- Local embeddings (HuggingFace sentence-transformers) and local Chroma vector store
--- Local LLM support via Ollama (optional) and optional OpenAI support
--- Angular UI with file upload, index control and chat interface
+- ✅ Upload and index PDF / Excel files
+- ✅ Local embeddings (HuggingFace sentence-transformers) and local Chroma vector store
+- ✅ Local LLM support via Ollama (optional) and optional OpenAI support
+- ✅ Modern Angular 20 UI with file upload, indexing, and chat interface
+- ✅ FastAPI REST backend with Swagger/ReDoc documentation
+- ✅ Standalone components, strict TypeScript, ES2022 target
 
 Architecture overview
 
-- `app.py` (backend) — FastAPI application exposing endpoints such as `/upload`, `/index`, `/query`, `/history`, `/clear`, `/download`.
-- `angular-app/` (frontend) — Angular application that provides the chat UI and file-upload pages and calls the FastAPI endpoints.
+- `backend-api/app.py` (backend) — FastAPI application exposing REST endpoints such as `/upload`, `/index`, `/query`, `/history`, `/clear`, `/download`.
+- `angular-app/` (frontend) — Modern Angular 20 single-page application with standalone components, TypeScript strict mode, and ES2022 target. Provides chat UI and file-upload interface that communicates with the FastAPI backend.
 - `chroma_db/` — persisted Chroma vector store folder (created/used by backend).
+- `uploads/` — sample PDFs and Excel files for testing the backend.
 
 Backend architecture (detailed)
 
@@ -99,11 +102,32 @@ Operational considerations
 
 This section documents the main backend responsibilities. The frontend (`angular-app/`) is a thin client that uploads files, triggers indexing and sends queries to the backend; see the `angular-app/src/app/services/api.ts` service for the exact request shapes used by the UI.
 
+Frontend technologies (Angular 20)
+
+The frontend is built with modern Angular 20 featuring:
+
+- **Standalone Components** — No NgModules; components bootstrap directly with `bootstrapApplication()`
+- **Strict TypeScript** — Full type checking enabled in `tsconfig.json` for safety and IDE support
+- **ES2022 Target** — Modern JavaScript syntax with async/await, nullish coalescing, optional chaining, etc.
+- **Reactive Forms** — Uses Angular Forms module (`FormsModule`) for two-way data binding
+- **HttpClient** — Direct HTTP communication to FastAPI backend with `provideHttpClient()`
+- **RxJS 7.8+** — Reactive streams for handling async operations
+- **Bootstrap 5.3** — Responsive CSS framework for styling
+- **Common Utilities** — `CommonModule` for `*ngIf`, `*ngFor`, etc.
+
+The app structure is minimal:
+- Single `AppComponent` (standalone) handles file uploads, document indexing, and chat queries
+- `ChatService` wraps API calls to the backend
+- HTML template with Bootstrap styling for responsive UI
+- Clean separation of concerns: UI → Service → Backend API
+
+See `angular-app/README.md` for frontend-specific setup and development notes.
+
 Prerequisites
 
 - Python 3.8+ (3.10/3.11/3.12/3.13 should work)
-- Node.js (v16+ recommended; this repo used Node v22 in development)
-- npm (or pnpm/yarn)
+- Node.js 18.13.0+ (v20+ recommended; this repo used v22 in development)
+- npm v9+ (or pnpm/yarn)
 - Optional: Ollama (for local LLM)
 - Optional: OpenAI API key (if you want to use OpenAI GPT)
 
@@ -210,16 +234,13 @@ Troubleshooting notes
 pip install python-multipart
 ```
 
-- Angular `npm install` peer dependency issues (zone.js): you may see a peer-deps conflict requiring `zone.js@~0.13.0`. Resolve by either:
+- Angular 20 `npm install` might show peer dependency warnings about `zone.js`. This is normal; zone.js 0.15 is compatible with Angular 20. Warnings can be safely ignored or suppressed with `--legacy-peer-deps` if needed.
 
-	1) Using legacy peer deps while installing:
-
-```powershell
-cd angular-app
-npm install --legacy-peer-deps
-```
-
-	2) Updating the `zone.js` dependency in `angular-app/package.json` to `"~0.13.0"` and re-running `npm install`.
+- If the Angular dev server fails to start, ensure:
+  1. You're in the `angular-app` directory
+  2. Node.js version is 18.13.0 or later (`node --version`)
+  3. Clear cache: `npm cache clean --force` then reinstall
+  4. Check `angular.json` for valid configuration (no `defaultProject` in Angular 20+)
 
 
 Development checklist & quick commands
@@ -234,14 +255,16 @@ pip install -r requirements.txt
 .\venv\Scripts\python.exe -m uvicorn app:app --reload
 ```
 
-
-- Frontend: install and run
+- Frontend (Angular 20): install and run
 
 ```powershell
 cd angular-app
 npm install
-npm run start
+npm start
+# Frontend will open at http://localhost:4200
 ```
+
+- Ensure both servers are running before testing the full application.
 
 Stopping servers
 - Use Ctrl+C in the terminals running the FastAPI or Angular dev servers to stop them.
@@ -251,12 +274,25 @@ Project layout (high-level)
 ```
 .
 ├── backend-api/
-│   ├── app.py             # FastAPI backend
-│   ├── requirements.txt   # Backend Python dependencies (fastapi, uvicorn, ...)
-│   ├── chroma_db/         # Local Chroma DB (created/used by backend)
-│   └── uploads/           # Uploads and example files for backend testing
-├── angular-app/           # Angular frontend (src, package.json, etc.)
-```
+│   ├── app.py                 # FastAPI backend (REST endpoints)
+│   ├── requirements.txt       # Python dependencies (fastapi, uvicorn, langchain, chroma, etc.)
+│   ├── chroma_db/             # Persistent Chroma vector database
+│   └── uploads/               # Example PDF/Excel files for testing
+├── angular-app/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── app.component.ts      # Main standalone component
+│   │   │   ├── app.component.html    # Chat UI template
+│   │   │   ├── app.component.css     # Component styles
+│   │   │   └── chat.service.ts       # API service (calls backend)
+│   │   ├── main.ts                   # Bootstrap entry point
+│   │   ├── index.html                # HTML template
+│   │   └── styles.css                # Global styles
+│   ├── package.json                  # Dependencies (Angular 20, TypeScript 5.8+, Bootstrap 5)
+│   ├── angular.json                  # Angular CLI configuration
+│   ├── tsconfig.json                 # TypeScript configuration (ES2022, strict mode)
+│   └── README.md                     # Frontend-specific documentation
+├── README.md                  # This file (main documentation)
 
 License
 
