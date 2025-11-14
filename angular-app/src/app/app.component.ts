@@ -1,4 +1,6 @@
 import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ChatService } from './chat.service';
 
 interface ChatMessage {
@@ -11,6 +13,8 @@ interface ChatMessage {
 
 @Component({
   selector: 'app-root',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css'],
 })
@@ -140,13 +144,15 @@ export class AppComponent implements OnInit {
   async downloadHistory() {
     try {
       const blob = await this.api.download().toPromise();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'chat_history.md';
-      a.click();
-      window.URL.revokeObjectURL(url);
-      this.showStatus('💾 Chat history downloaded.', 'success');
+      if (blob) {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'chat_history.md';
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.showStatus('💾 Chat history downloaded.', 'success');
+      }
     } catch (err) {
       console.error(err);
       this.showStatus('❌ Failed to download chat.', 'error');
