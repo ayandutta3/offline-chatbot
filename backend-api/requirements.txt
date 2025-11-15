@@ -1,20 +1,21 @@
-chromadb
-transformers
-onnxruntime
-pydantic
-pdfminer.six
-ollamastreamlit
-pypdf
-pandas
-langchain
-langchain_community
-langchain_chroma
-langchain_huggingface
-sentence-transformers
-torch
-openai
-python-dotenv
-langchain_ollama   # for local mode
-fastapi            # for REST API backend
-uvicorn           # for running FastAPI server
-python-multipart   # for handling form data
+fastapi==0.110.0
+uvicorn==0.29.0
+python-multipart==0.0.9
+python-dotenv==1.0.1
+
+pandas==2.2.3
+openpyxl==3.1.2
+pypdf==4.2.0
+
+numpy==1.26.4
+
+sentence-transformers==2.5.1
+torch==2.2.2
+
+chromadb==0.4.22
+
+langchain==0.1.13
+langchain-community==0.0.32
+langchain-core==0.1.42
+
+openai==0.28.1
